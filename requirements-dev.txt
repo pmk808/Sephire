@@ -1,0 +1,16 @@
+# Include production requirements
+-r requirements.txt
+
+# Code Formatting & Linting
+black==25.1.0
+isort==6.0.1
+
+# Type Checking (optional)
+mypy==1.8.0
+
+# Testing (for future)
+pytest==7.4.3
+pytest-asyncio==0.23.2
+
+# Development Server (already in uvicorn[standard])
+# watchfiles  # Auto-reload on file changes
