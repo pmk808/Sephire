@@ -1,6 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Literal, Optional
-
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -17,54 +16,13 @@ class DiscoveryLevel(str, Enum):
     MAINSTREAM = "Mainstream"
 
 
-# Request Models
-class TopTracksRequest(BaseModel):
-    limit: int = Field(
-        default=10, ge=1, le=50, description="Number of tracks to return"
-    )
-    time_range: TimeRange = Field(
-        default=TimeRange.MEDIUM_TERM, description="Time period for analysis"
-    )
-
-
-class TopArtistsRequest(BaseModel):
-    limit: int = Field(
-        default=10, ge=1, le=50, description="Number of artists to return"
-    )
-    time_range: TimeRange = Field(
-        default=TimeRange.MEDIUM_TERM, description="Time period for analysis"
-    )
-
-
-# Response Models
-class WelcomeResponse(BaseModel):
-    message: str
-    status: str
-    endpoints: Dict[str, str]
-
-
-class HealthResponse(BaseModel):
-    status: str
-    service: str
-
-
-class AuthSuccessResponse(BaseModel):
-    message: str
-    status: str
-    next_steps: str
-
-
+# Core Data Models
 class UserProfile(BaseModel):
     name: Optional[str]
     email: Optional[str]
     country: Optional[str]
     followers: int
     subscription: Optional[str]
-
-
-class UserProfileResponse(BaseModel):
-    user: UserProfile
-    spotify_profile: Optional[str]
 
 
 class Track(BaseModel):
@@ -77,24 +35,12 @@ class Track(BaseModel):
     spotify_url: str
 
 
-class TopTracksResponse(BaseModel):
-    time_range: str
-    total_tracks: int
-    tracks: List[Track]
-
-
 class Artist(BaseModel):
     name: str
     genres: List[str]
     popularity: int
     followers: int
     spotify_url: str
-
-
-class TopArtistsResponse(BaseModel):
-    time_range: str
-    total_artists: int
-    artists: List[Artist]
 
 
 class MusicTasteProfile(BaseModel):
@@ -112,13 +58,48 @@ class StatsSummary(BaseModel):
     estimated_listening_hours: float
 
 
+# API Response Models
+class WelcomeResponse(BaseModel):
+    message: str
+    status: str
+    endpoints: Dict[str, str]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+
+
+class AuthSuccessResponse(BaseModel):
+    message: str
+    status: str
+    next_steps: str
+
+
+class UserProfileResponse(BaseModel):
+    user: UserProfile
+    spotify_profile: Optional[str]
+
+
+class TopTracksResponse(BaseModel):
+    time_range: str
+    total_tracks: int
+    tracks: List[Track]
+
+
+class TopArtistsResponse(BaseModel):
+    time_range: str
+    total_artists: int
+    artists: List[Artist]
+
+
 class UserStatsResponse(BaseModel):
     summary: StatsSummary
     top_genres: Dict[str, int]
     music_taste_profile: MusicTasteProfile
 
 
-# Token storage model
+# Authentication Model
 class UserToken(BaseModel):
     access_token: str
     refresh_token: Optional[str]

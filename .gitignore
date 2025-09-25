@@ -62,9 +62,8 @@ nosetests.xml
 test-results/
 test-reports/
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
+# Jupyter Notebook checkpoints (but keep .ipynb files!)
+.ipynb_checkpoints/
 
 # IPython
 profile_default/
@@ -144,22 +143,28 @@ docker-compose.override.yml
 # FastAPI specific
 .pytest_cache
 
-# Data files (for analytics projects)
+# Data files - EXCLUDE generated data but keep raw samples
+data/processed/
+data/raw/user_data/
+data/exports/
 *.csv
-*.json
-*.xlsx
 *.parquet
-data/
-datasets/
+user_*.json
+analysis_*.json
 
-# Charts and outputs
+# ML Models - EXCLUDE large trained models
+ml_models/*.pkl
+ml_models/*.joblib
+ml_models/*.h5
+
+# Charts and outputs - EXCLUDE generated visualizations
 charts/
 plots/
 output/
 *.png
 *.jpg
 *.svg
-reports/
+reports/*.pdf
 
 # Backup files
 *.bak
@@ -169,3 +174,8 @@ reports/
 # Temporary files
 *.tmp
 *.temp
+
+# Large datasets
+datasets/large/
+*.zip
+*.tar.gz

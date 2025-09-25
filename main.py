@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, HTTPException, Query
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import RedirectResponse
 import os
 import requests
 import base64
@@ -21,12 +21,12 @@ from models import (
 load_dotenv()
 
 app = FastAPI(
-    title="Sephire - Spotify Analytics",
+    title="Sephire - Spotify Analytics API",
     version="1.0.0",
-    description="Personal Spotify analytics with full type safety"
+    description="Clean FastAPI server for Spotify data - Analysis done in Jupyter"
 )
 
-# Spotify API credentials with type hints
+# Spotify API credentials
 SPOTIFY_CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID") # type: ignore
 SPOTIFY_CLIENT_SECRET: str = os.getenv("SPOTIFY_CLIENT_SECRET") # type: ignore
 SPOTIFY_REDIRECT_URI: str = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
@@ -36,36 +36,36 @@ SPOTIFY_AUTH_URL: str = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL: str = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE_URL: str = "https://api.spotify.com/v1"
 
-# Typed in-memory storage (use database in production)
+# In-memory token storage (use database in production)
 user_tokens: Dict[str, UserToken] = {}
 
 @app.get("/", response_model=WelcomeResponse)
 async def welcome() -> WelcomeResponse:
-    """Welcome endpoint with typed response"""
+    """Welcome endpoint - clean and focused"""
     return WelcomeResponse(
-        message="Welcome to Sephire - Your Personal Spotify Analytics!",
+        message="Sephire API - Spotify Data Server for ML Analysis",
         status="running",
         endpoints={
             "login": "/login",
             "profile": "/my-profile",
             "top_tracks": "/top-tracks",
             "top_artists": "/top-artists",
-            "stats": "/my-stats"
+            "stats": "/my-stats",
+            "audio_features": "/audio-features",
+            "recently_played": "/recently-played"
         }
     )
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
-    """Health check endpoint with typed response"""
+    """Health check endpoint"""
     return HealthResponse(status="healthy", service="sephire-api")
 
 @app.get("/login")
 async def login() -> RedirectResponse:
     """Initiate Spotify OAuth flow"""
-    # Generate a random state for security
     state: str = secrets.token_urlsafe(16)
 
-    # Define the scopes we need
     scopes: List[str] = [
         "user-read-private",
         "user-read-email",
@@ -73,7 +73,6 @@ async def login() -> RedirectResponse:
         "user-read-recently-played"
     ]
 
-    # Create authorization URL
     params: Dict[str, str] = {
         "client_id": SPOTIFY_CLIENT_ID,
         "response_type": "code",
@@ -83,23 +82,21 @@ async def login() -> RedirectResponse:
     }
 
     auth_url: str = f"{SPOTIFY_AUTH_URL}?{urlencode(params)}"
-
     return RedirectResponse(url=auth_url)
 
 @app.get("/callback", response_model=AuthSuccessResponse)
 async def callback(
     code: Optional[str] = None,
-    state: Optional[str] = None,
     error: Optional[str] = None
 ) -> AuthSuccessResponse:
-    """Handle Spotify OAuth callback with typed parameters"""
+    """Handle Spotify OAuth callback"""
     if error:
         raise HTTPException(status_code=400, detail=f"Spotify auth error: {error}")
 
     if not code:
         raise HTTPException(status_code=400, detail="No authorization code received")
 
-    # Exchange authorization code for access token
+    # Exchange code for token
     auth_header: str = base64.b64encode(
         f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
     ).decode()
@@ -122,8 +119,8 @@ async def callback(
 
     token_data: Dict = response.json()
 
-    # Store token with proper typing
-    user_id: str = "demo_user"  # In real app, get from user session
+    # Store token
+    user_id: str = "demo_user"  # In real app, use proper user sessions
     user_tokens[user_id] = UserToken(
         access_token=token_data["access_token"],
         refresh_token=token_data.get("refresh_token"),
@@ -133,11 +130,11 @@ async def callback(
     return AuthSuccessResponse(
         message="Successfully authenticated with Spotify!",
         status="logged_in",
-        next_steps="Visit /my-profile to see your data"
+        next_steps="Use /top-tracks, /top-artists, or /my-stats endpoints"
     )
 
 def get_spotify_headers(user_id: str = "demo_user") -> Dict[str, str]:
-    """Get headers for Spotify API requests with proper typing"""
+    """Get headers for Spotify API requests"""
     if user_id not in user_tokens:
         raise HTTPException(status_code=401, detail="Not authenticated. Please visit /login first")
 
@@ -146,7 +143,7 @@ def get_spotify_headers(user_id: str = "demo_user") -> Dict[str, str]:
 
 @app.get("/my-profile", response_model=UserProfileResponse)
 async def get_user_profile() -> UserProfileResponse:
-    """Get current user's Spotify profile with typed response"""
+    """Get user's Spotify profile"""
     headers: Dict[str, str] = get_spotify_headers()
 
     response: requests.Response = requests.get(f"{SPOTIFY_API_BASE_URL}/me", headers=headers)
@@ -174,7 +171,7 @@ async def get_top_tracks(
     limit: int = Query(default=10, ge=1, le=50, description="Number of tracks to return"),
     time_range: TimeRange = Query(default=TimeRange.MEDIUM_TERM, description="Time period")
 ) -> TopTracksResponse:
-    """Get user's top tracks with proper typing"""
+    """Get user's top tracks - clean data for ML analysis"""
     headers: Dict[str, str] = get_spotify_headers()
 
     params: Dict[str, str] = {
@@ -193,7 +190,7 @@ async def get_top_tracks(
 
     data: Dict = response.json()
 
-    # Process the data with proper typing
+    # Process data into clean format
     tracks: List[Track] = []
     for track_data in data.get("items", []):
         track = Track(
@@ -218,7 +215,7 @@ async def get_top_artists(
     limit: int = Query(default=10, ge=1, le=50, description="Number of artists to return"),
     time_range: TimeRange = Query(default=TimeRange.MEDIUM_TERM, description="Time period")
 ) -> TopArtistsResponse:
-    """Get user's top artists with proper typing"""
+    """Get user's top artists - clean data for ML analysis"""
     headers: Dict[str, str] = get_spotify_headers()
 
     params: Dict[str, str] = {
@@ -237,7 +234,7 @@ async def get_top_artists(
 
     data: Dict = response.json()
 
-    # Process the data with proper typing
+    # Process data into clean format
     artists: List[Artist] = []
     for artist_data in data.get("items", []):
         artist = Artist(
@@ -257,10 +254,10 @@ async def get_top_artists(
 
 @app.get("/my-stats", response_model=UserStatsResponse)
 async def get_user_stats() -> UserStatsResponse:
-    """Get comprehensive user statistics with full typing"""
+    """Get basic user statistics - detailed analysis done in Jupyter"""
     headers: Dict[str, str] = get_spotify_headers()
 
-    # Get top tracks and artists for analysis
+    # Get data for basic stats
     tracks_response: requests.Response = requests.get(
         f"{SPOTIFY_API_BASE_URL}/me/top/tracks?limit=50&time_range=medium_term",
         headers=headers
@@ -276,27 +273,26 @@ async def get_user_stats() -> UserStatsResponse:
     tracks_data: Dict = tracks_response.json()
     artists_data: Dict = artists_response.json()
 
-    # Analyze genres with proper typing
+    # Basic genre analysis
     all_genres: List[str] = []
     for artist in artists_data.get("items", []):
         all_genres.extend(artist.get("genres", []))
 
-    # Count genre frequency
     genre_counts: Counter = Counter(all_genres)
     top_genres: Dict[str, int] = dict(genre_counts.most_common(10))
 
-    # Calculate average popularity with type safety
+    # Basic popularity stats
     track_popularities: List[int] = [track["popularity"] for track in tracks_data.get("items", [])]
     avg_track_popularity: float = sum(track_popularities) / len(track_popularities) if track_popularities else 0.0
 
     artist_popularities: List[int] = [artist["popularity"] for artist in artists_data.get("items", [])]
     avg_artist_popularity: float = sum(artist_popularities) / len(artist_popularities) if artist_popularities else 0.0
 
-    # Calculate total listening time
+    # Basic listening time
     total_duration_ms: int = sum(track["duration_ms"] for track in tracks_data.get("items", []))
     total_hours: float = round(total_duration_ms / (1000 * 60 * 60), 2)
 
-    # Determine discovery level with proper enum usage
+    # Discovery level
     if avg_track_popularity < 50:
         discovery_level = DiscoveryLevel.HIGH
     elif avg_track_popularity < 70:
@@ -304,7 +300,7 @@ async def get_user_stats() -> UserStatsResponse:
     else:
         discovery_level = DiscoveryLevel.MAINSTREAM
 
-    # Build response with proper models
+    # Build response
     summary = StatsSummary(
         total_top_tracks=len(tracks_data.get("items", [])),
         total_top_artists=len(artists_data.get("items", [])),
@@ -326,6 +322,88 @@ async def get_user_stats() -> UserStatsResponse:
         music_taste_profile=music_taste_profile
     )
 
+@app.get("/audio-features")
+async def get_audio_features(limit: int = Query(default=30, ge=1, le=50)) -> Dict:
+    """Get audio features for ML analysis"""
+    headers: Dict[str, str] = get_spotify_headers()
+
+    # Get top tracks
+    tracks_response = requests.get(
+        f"{SPOTIFY_API_BASE_URL}/me/top/tracks?limit={limit}&time_range=medium_term",
+        headers=headers
+    )
+
+    if tracks_response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch tracks")
+
+    tracks_data = tracks_response.json()
+    tracks = tracks_data.get("items", [])
+
+    if not tracks:
+        raise HTTPException(status_code=400, detail="No tracks found")
+
+    track_ids = [track["id"] for track in tracks if track.get("id")]
+
+    if not track_ids:
+        raise HTTPException(status_code=400, detail="No valid track IDs found")
+
+    # Get audio features
+    ids_string = ','.join(track_ids)
+    features_response = requests.get(
+        f"{SPOTIFY_API_BASE_URL}/audio-features?ids={ids_string}",
+        headers=headers
+    )
+
+    if features_response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch audio features")
+
+    features_data = features_response.json()
+    audio_features = [f for f in features_data.get("audio_features", []) if f is not None]
+
+    if not audio_features:
+        raise HTTPException(status_code=400, detail="No audio features available")
+
+    return {
+        "audio_features": audio_features,
+        "total_tracks": len(audio_features),
+        "message": "Use this data in Jupyter for detailed analysis"
+    }
+
+@app.get("/recently-played")
+async def get_recently_played(limit: int = Query(default=50, ge=1, le=50)) -> Dict:
+    """Get recently played tracks for time-series analysis"""
+    headers: Dict[str, str] = get_spotify_headers()
+
+    response: requests.Response = requests.get(
+        f"{SPOTIFY_API_BASE_URL}/me/player/recently-played?limit={limit}",
+        headers=headers
+    )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Failed to fetch recent tracks")
+
+    recent_data = response.json()
+
+    # Clean format for analysis
+    recent_tracks = []
+    for item in recent_data.get("items", []):
+        track = item["track"]
+        recent_tracks.append({
+            'name': track["name"],
+            'artist': ", ".join([artist["name"] for artist in track["artists"]]),
+            'album': track["album"]["name"],
+            'duration_ms': track["duration_ms"],
+            'played_at': item["played_at"],
+            'popularity': track["popularity"],
+            'spotify_url': track["external_urls"]["spotify"]
+        })
+
+    return {
+        "recent_tracks": recent_tracks,
+        "total_tracks": len(recent_tracks),
+        "message": "Use this data in Jupyter for listening pattern analysis"
+    }
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
