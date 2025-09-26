@@ -323,8 +323,9 @@ async def get_user_stats() -> UserStatsResponse:
     )
 
 @app.get("/audio-features")
-async def get_audio_features(limit: int = Query(default=30, ge=1, le=50)) -> Dict:
-    """Get audio features for ML analysis"""
+async def get_audio_features(limit: int = Query(default=20, ge=1, le=30)) -> Dict:
+    """Get audio features + popularity scores for ML analysis - FIXED for 403 errors"""
+
     headers: Dict[str, str] = get_spotify_headers()
 
     # Get top tracks
@@ -347,26 +348,138 @@ async def get_audio_features(limit: int = Query(default=30, ge=1, le=50)) -> Dic
     if not track_ids:
         raise HTTPException(status_code=400, detail="No valid track IDs found")
 
-    # Get audio features
-    ids_string = ','.join(track_ids)
-    features_response = requests.get(
-        f"{SPOTIFY_API_BASE_URL}/audio-features?ids={ids_string}",
-        headers=headers
-    )
+    # FIX: Process in smaller batches to avoid 403 errors
+    batch_size = 10  # Smaller batches are more reliable
+    all_audio_features = []
 
-    if features_response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Failed to fetch audio features")
+    print(f"🔍 Processing {len(track_ids)} tracks in batches of {batch_size}")
 
-    features_data = features_response.json()
-    audio_features = [f for f in features_data.get("audio_features", []) if f is not None]
+    for i in range(0, len(track_ids), batch_size):
+        batch_ids = track_ids[i:i + batch_size]
+        batch_tracks = tracks[i:i + batch_size]
 
-    if not audio_features:
-        raise HTTPException(status_code=400, detail="No audio features available")
+        print(f"🔍 Processing batch {i//batch_size + 1}: tracks {i+1}-{min(i+batch_size, len(track_ids))}")
+
+        try:
+            # Get audio features for this batch
+            ids_string = ','.join(batch_ids)
+            features_response = requests.get(
+                f"{SPOTIFY_API_BASE_URL}/audio-features?ids={ids_string}",
+                headers=headers,
+                timeout=10  # Add timeout
+            )
+
+            print(f"🔍 Batch response status: {features_response.status_code}")
+
+            if features_response.status_code == 403:
+                print("⚠️ 403 error - trying individual track requests as fallback...")
+
+                # Fallback: Request tracks individually
+                for track_id, track in zip(batch_ids, batch_tracks):
+                    try:
+                        single_response = requests.get(
+                            f"{SPOTIFY_API_BASE_URL}/audio-features/{track_id}",
+                            headers=headers,
+                            timeout=5
+                        )
+
+                        if single_response.status_code == 200:
+                            audio_feature = single_response.json()
+                            if audio_feature:
+                                combined_record = {
+                                    'track_id': track['id'],
+                                    'name': track['name'],
+                                    'artist': ', '.join([artist['name'] for artist in track['artists']]),
+                                    'popularity': track['popularity'],
+                                    'danceability': audio_feature.get('danceability'),
+                                    'energy': audio_feature.get('energy'),
+                                    'speechiness': audio_feature.get('speechiness'),
+                                    'acousticness': audio_feature.get('acousticness'),
+                                    'instrumentalness': audio_feature.get('instrumentalness'),
+                                    'liveness': audio_feature.get('liveness'),
+                                    'valence': audio_feature.get('valence'),
+                                    'tempo': audio_feature.get('tempo'),
+                                    'loudness': audio_feature.get('loudness')
+                                }
+                                all_audio_features.append(combined_record)
+                        else:
+                            print(f"⚠️ Could not get features for track {track['name']}")
+
+                    except Exception as e:
+                        print(f"⚠️ Error getting individual track {track_id}: {e}")
+                        continue
+
+            elif features_response.status_code == 200:
+                # Normal batch processing
+                features_data = features_response.json()
+                raw_audio_features = features_data.get("audio_features", [])
+
+                for track, audio_feature in zip(batch_tracks, raw_audio_features):
+                    if audio_feature is not None:
+                        combined_record = {
+                            'track_id': track['id'],
+                            'name': track['name'],
+                            'artist': ', '.join([artist['name'] for artist in track['artists']]),
+                            'popularity': track['popularity'],
+                            'danceability': audio_feature.get('danceability'),
+                            'energy': audio_feature.get('energy'),
+                            'speechiness': audio_feature.get('speechiness'),
+                            'acousticness': audio_feature.get('acousticness'),
+                            'instrumentalness': audio_feature.get('instrumentalness'),
+                            'liveness': audio_feature.get('liveness'),
+                            'valence': audio_feature.get('valence'),
+                            'tempo': audio_feature.get('tempo'),
+                            'loudness': audio_feature.get('loudness')
+                        }
+                        all_audio_features.append(combined_record)
+            else:
+                print(f"⚠️ Batch failed with status {features_response.status_code}")
+
+        except Exception as e:
+            print(f"⚠️ Error processing batch: {e}")
+            continue
+
+        # Small delay between batches to avoid rate limiting
+        import time
+        time.sleep(0.1)
+
+    print(f"✅ Successfully processed {len(all_audio_features)} tracks")
+
+    if not all_audio_features:
+        # Last resort: return tracks with dummy audio features for testing
+        print("⚠️ No audio features available - returning tracks with basic data only")
+        basic_features = []
+        for track in tracks[:10]:  # Just first 10 tracks
+            basic_record = {
+                'track_id': track['id'],
+                'name': track['name'],
+                'artist': ', '.join([artist['name'] for artist in track['artists']]),
+                'popularity': track['popularity'],
+                # Add dummy values for ML testing
+                'danceability': 0.5,
+                'energy': 0.5,
+                'speechiness': 0.1,
+                'acousticness': 0.5,
+                'instrumentalness': 0.1,
+                'liveness': 0.2,
+                'valence': 0.5,
+                'tempo': 120.0,
+                'loudness': -10.0
+            }
+            basic_features.append(basic_record)
+
+        return {
+            "audio_features": basic_features,
+            "total_tracks": len(basic_features),
+            "message": "Using basic track data with dummy audio features - audio features API unavailable",
+            "warning": "Audio features are dummy values - predictions will not be accurate"
+        }
 
     return {
-        "audio_features": audio_features,
-        "total_tracks": len(audio_features),
-        "message": "Use this data in Jupyter for detailed analysis"
+        "audio_features": all_audio_features,
+        "total_tracks": len(all_audio_features),
+        "message": "Audio features + popularity scores ready for ML analysis",
+        "processing_info": f"Successfully processed {len(all_audio_features)} out of {len(tracks)} tracks"
     }
 
 @app.get("/recently-played")
@@ -402,6 +515,41 @@ async def get_recently_played(limit: int = Query(default=50, ge=1, le=50)) -> Di
         "recent_tracks": recent_tracks,
         "total_tracks": len(recent_tracks),
         "message": "Use this data in Jupyter for listening pattern analysis"
+    }
+
+@app.get("/track/{track_id}")
+async def get_track_by_id(track_id: str) -> Dict:
+    """Get specific track info by Spotify ID"""
+    headers = get_spotify_headers()
+
+    # Get track basic info
+    track_response = requests.get(
+        f"{SPOTIFY_API_BASE_URL}/tracks/{track_id}",
+        headers=headers
+    )
+
+    # Get audio features
+    features_response = requests.get(
+        f"{SPOTIFY_API_BASE_URL}/audio-features/{track_id}",
+        headers=headers
+    )
+
+    if track_response.status_code != 200:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    track_data = track_response.json()
+    features_data = features_response.json() if features_response.status_code == 200 else {}
+
+    return {
+        "track_info": {
+            "name": track_data["name"],
+            "artist": ", ".join([artist["name"] for artist in track_data["artists"]]),
+            "album": track_data["album"]["name"],
+            "popularity": track_data["popularity"],
+            "duration_ms": track_data["duration_ms"],
+            "spotify_url": track_data["external_urls"]["spotify"]
+        },
+        "audio_features": features_data
     }
 
 if __name__ == "__main__":
